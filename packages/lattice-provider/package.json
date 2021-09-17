@@ -1,5 +1,5 @@
 {
-  "name": "@liquality/ledger-provider",
+  "name": "@liquality/lattice-provider",
   "version": "1.6.1",
   "description": "",
   "module": "dist/index.js",
@@ -38,11 +38,6 @@
   },
   "publishConfig": {
     "access": "public"
-  },
-  "devDependencies": {
-    "@types/ledgerhq__hw-transport-node-hid": "^4.22.2",
-    "@types/ledgerhq__hw-transport-u2f": "^4.21.2",
-    "@types/ledgerhq__hw-transport-webusb": "^4.70.1"
   },
   "sideEffects": false
 }
