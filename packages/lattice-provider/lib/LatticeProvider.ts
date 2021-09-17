@@ -88,6 +88,9 @@ export default abstract class LatticeProvider<TApp extends IApp> extends WalletP
           const client = new Client(clientOpts)
           // Add the client to our app instance and return
           this._appInstance = new Proxy(new this._App(client, data.deviceID), { get: this.errorProxy.bind(this) })
+          // Connect to the device
+          await this._connect()
+          // Return the connected instance
           return this._appInstance
         } catch (err) {
           throw new WalletError(err.toString())
@@ -95,6 +98,8 @@ export default abstract class LatticeProvider<TApp extends IApp> extends WalletP
       }
       window.addEventListener("message", receiveMessage, false);
     } else {
+      // Connect and return the instance
+      await this._connect()
       return this._appInstance
     }
   }
