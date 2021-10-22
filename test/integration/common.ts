@@ -8,6 +8,7 @@ import { Client } from '../../packages/client/lib'
 import * as crypto from '../../packages/crypto/lib'
 import * as errors from '../../packages/errors/lib'
 import * as utils from '../../packages/utils/lib'
+import { BitcoinLatticeProvider } from '../../packages/bitcoin-lattice-provider/lib'
 import { BitcoinLedgerProvider } from '../../packages/bitcoin-ledger-provider/lib'
 import { BitcoinSwapProvider } from '../../packages/bitcoin-swap-provider/lib'
 import { BitcoinNodeWalletProvider } from '../../packages/bitcoin-node-wallet-provider/lib'
@@ -17,6 +18,7 @@ import * as BitcoinUtils from '../../packages/bitcoin-utils/lib'
 import { EthereumRpcProvider } from '../../packages/ethereum-rpc-provider/lib'
 import { EthereumWalletApiProvider } from '../../packages/ethereum-wallet-api-provider/lib'
 import { EthereumSwapProvider } from '../../packages/ethereum-swap-provider/lib'
+import { EthereumLatticeProvider } from '../../packages/ethereum-lattice-provider/lib'
 import { EthereumLedgerProvider } from '../../packages/ethereum-ledger-provider/lib'
 import { EthereumJsWalletProvider } from '../../packages/ethereum-js-wallet-provider/lib'
 import { EthereumErc20Provider } from '../../packages/ethereum-erc20-provider/lib'
@@ -42,6 +44,28 @@ import config from './config'
 const sleep = utils.sleep
 
 chai.use(chaiAsPromised)
+
+// NOTE: Required for testing when a device needs to be paired
+const LATTICE_INPUT_PAIRING = () =>
+  new Promise<string>((res) => {
+    const stdin = process.stdin
+    const stdout = process.stdout
+    stdin.resume()
+    stdout.write('Enter Pairing Code: ')
+    stdin.once('data', (data) => {
+      res(data.toString().trim().toUpperCase())
+    })
+  })
+
+const LATTICE_SIGNING_DEV = 'https://signing.staging-gridpl.us'
+// const LATTICE_SIGNING_PROD = 'https://signing.gridpl.us'
+
+// NOTE: Keep these private!
+const LATTICE_CREDS = {
+  deviceId: '',
+  password: '',
+  endpoint: LATTICE_SIGNING_DEV
+}
 
 const TEST_TIMEOUT = 240000
 
@@ -82,6 +106,17 @@ bitcoinWithLedger.addProvider(
 )
 bitcoinWithLedger.addProvider(new BitcoinSwapProvider({ network: config.bitcoin.network }))
 
+const bitcoinWithLattice = new Client()
+bitcoinWithLattice.addProvider(
+  new BitcoinLatticeProvider({
+    pairingCodeProvider: LATTICE_INPUT_PAIRING,
+    derivationPath: "m/49'/0'/0'/0/0",
+    deviceID: LATTICE_CREDS.deviceId,
+    devicePassword: LATTICE_CREDS.password,
+    network: config.bitcoin.network
+  })
+)
+
 const bitcoinWithNode = new Client()
 bitcoinWithNode.addProvider(mockedBitcoinRpcProvider())
 bitcoinWithNode.addProvider(
@@ -115,6 +150,17 @@ ethereumWithMetaMask.addProvider(new EthereumSwapProvider())
 const ethereumWithNode = new Client()
 ethereumWithNode.addProvider(new EthereumRpcProvider({ uri: config.ethereum.rpc.host }))
 ethereumWithNode.addProvider(new EthereumSwapProvider())
+
+const ethereumWithLattice = new Client()
+ethereumWithLattice.addProvider(
+  new EthereumLatticeProvider({
+    pairingCodeProvider: LATTICE_INPUT_PAIRING,
+    derivationPath: `m/44'/${config.ethereum.network.coinType}'/0'/0/0`,
+    deviceID: LATTICE_CREDS.deviceId,
+    devicePassword: LATTICE_CREDS.password,
+    network: config.ethereum.network
+  })
+)
 
 const ethereumWithLedger = new Client()
 ethereumWithLedger.addProvider(new EthereumRpcProvider({ uri: config.ethereum.rpc.host }))
@@ -225,6 +271,12 @@ interface Chain {
 }
 
 const chains: { [index: string]: Chain } = {
+  bitcoinWithLattice: {
+    id: 'Bitcoin Lattice',
+    name: 'bitcoin',
+    client: bitcoinWithLattice,
+    network: config.bitcoin.network
+  },
   bitcoinWithLedger: {
     id: 'Bitcoin Ledger',
     name: 'bitcoin',
@@ -240,6 +292,7 @@ const chains: { [index: string]: Chain } = {
   },
   bitcoinWithJs: { id: 'Bitcoin Js', name: 'bitcoin', client: bitcoinWithJs, network: config.bitcoin.network },
   ethereumWithMetaMask: { id: 'Ethereum MetaMask', name: 'ethereum', client: ethereumWithMetaMask },
+  ethereumWithLattice: { id: 'Ethereum Lattice', name: 'ethereum', client: ethereumWithLattice },
   ethereumWithNode: { id: 'Ethereum Node', name: 'ethereum', client: ethereumWithNode },
   ethereumWithLedger: { id: 'Ethereum Ledger', name: 'ethereum', client: ethereumWithLedger },
   ethereumWithJs: { id: 'Ethereum Js', name: 'ethereum', client: ethereumWithJs },

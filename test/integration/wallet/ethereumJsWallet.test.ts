@@ -10,6 +10,13 @@ process.env['NODE_TLS_REJECT_UNAUTHORIZED'] = ''
 chai.use(chaiAsPromised)
 
 function testWallet(chain: Chain, derivationPath: string) {
+  describe('isWalletAvailable', () => {
+    it('should determine wallet availability', async () => {
+      const isWalletAvailable = await chain.client.wallet.isWalletAvailable()
+      expect(isWalletAvailable).to.equal(true)
+    })
+  })
+
   describe('getAddresses', () => {
     it('should return first address at index 0 derivationPath', async () => {
       const expectedAddress0DerivationPath = derivationPath
@@ -20,6 +27,7 @@ function testWallet(chain: Chain, derivationPath: string) {
     })
   })
 
+  /*
   describe('getUnusedAddress', () => {
     it('should return first address at index 0 derivationPath', async () => {
       const expectedAddress0DerivationPath = derivationPath
@@ -38,6 +46,7 @@ function testWallet(chain: Chain, derivationPath: string) {
       expect(addresses[0].derivationPath).to.equal(expectedAddress0DerivationPath)
     })
   })
+  */
 
   describe('signMessage', () => {
     // TODO: this whole test suite should be combined with `bitcoinWallet.js`
@@ -63,6 +72,7 @@ function testWallet(chain: Chain, derivationPath: string) {
     })
   })
 
+  /*
   describe('exportPrivateKey', () => {
     it('should return a matching string', async () => {
       const key = await chain.client.wallet.exportPrivateKey()
@@ -70,10 +80,20 @@ function testWallet(chain: Chain, derivationPath: string) {
       expect(key).to.match(config[chain.name].privKeyRx)
     })
   })
+  */
 }
 
 describe('Wallet Interaction', function () {
   this.timeout(TEST_TIMEOUT)
+
+  describe('Bitcoin - Lattice', () => {
+    testWallet(chains.bitcoinWithLattice, `m/49'/${config.ethereum.network.coinType}'/0'/0/0`)
+  })
+
+  /*
+  describe('Ethereum - Lattice', () => {
+    testWallet(chains.ethereumWithLattice, `m/44'/${config.ethereum.network.coinType}'/0'/0/0`)
+  })
 
   describe('Ethereum - Js', () => {
     testWallet(chains.ethereumWithJs, `m/44'/${config.ethereum.network.coinType}'/0'/0/0`)
@@ -82,4 +102,5 @@ describe('Wallet Interaction', function () {
   describe('Near - Js', () => {
     testWallet(chains.nearWithJs, `m/44'/${config.near.network.coinType}'/0'`)
   })
+  */
 })

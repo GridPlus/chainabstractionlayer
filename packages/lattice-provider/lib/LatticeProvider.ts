@@ -1,176 +1,230 @@
+import { Network } from '@liquality/types'
 import { WalletProvider } from '@liquality/wallet-provider'
 import { WalletError } from '@liquality/errors'
-import { Network } from '@liquality/types'
+import { Address } from '@liquality/types'
 import { Client } from 'gridplus-sdk'
 import crypto, { createHash } from 'crypto'
-const DEFAULT_APP_NAME = 'Liquality Wallet'
-const GRIDPLUS_CONNECT_DEV = 'https://gridplus-web-wallet-dev.herokuapp.com'
-const GRIDPLUS_CONNECT_PROD = 'https://wallet.gridplus.io'
-const GRIDPLUS_SIGNING_DEV = 'https://signing.staging-gridpl.us'
-const GRIDPLUS_SIGNING_PROD = 'https://signing.gridpl.us'
-let GLOBAL_CLIENT_DATA: SDKClientInfo = null
-let GLOBAL_CONNECT_INFO: LatticeConnectInfo = {
-  appName: null,
-  isTestnet: false
-}
 
-interface IApp {
-  client: any
+// @ts-ignore
+const LATTICE_SIGNING_DEV = 'https://signing.staging-gridpl.us'
+const LATTICE_SIGNING_PROD = 'https://signing.gridpl.us'
+
+export interface LatticeProviderOptions {
+  pairingCodeProvider?: () => Promise<string>
+  appName?: string
+  derivationPath: string
+  deviceEndpoint?: string
   deviceID: string
+  devicePassword: string
 }
 
-interface LatticeConnectInfo {
-  appName: string
-  isTestnet: boolean
-}
+export default abstract class LatticeProvider extends WalletProvider {
+  _derivationPath: string
+  _deviceID: string
+  _cachedAddresses: Array<Address>
+  _pairingCodeProvider?: () => Promise<string>
+  protected _lattice: any
 
-interface SDKClientInfo {
-  sdkClient: any
-  deviceID: string
-}
+  constructor(options: LatticeProviderOptions, network: Network) {
+    const {
+      pairingCodeProvider,
+      appName = 'Liquality',
+      derivationPath,
+      deviceEndpoint = LATTICE_SIGNING_PROD,
+      deviceID,
+      devicePassword,
+    } = options
 
-export type Newable<T> = { new (...args: any[]): T }
+    //--------------------------------------------------------------------------
+    super({ network: network })
 
-export default abstract class LatticeProvider<TApp extends IApp> extends WalletProvider {
-  _App: any
-  _network: Network
-  _appName: string
-  _appInstance: TApp
-  _isWaitingForWindow: boolean
+    //--------------------------------------------------------------------------
+    this._derivationPath = derivationPath
+    this._deviceID = deviceID
+    this._pairingCodeProvider = pairingCodeProvider
+    this._cachedAddresses = []
+    //--------------------------------------------------------------------------
+    console.log(`${JSON.stringify(network, null, 2)}`)
+    console.log(`${JSON.stringify(this._derivationPath, null, 2)}`)
 
-  constructor(options: { App: Newable<TApp>; network: Network; appName: string }) {
-    super({ network: options.network })
+    //--------------------------------------------------------------------------
+    const privKeyPreImage = Buffer.concat([Buffer.from(deviceID), Buffer.from(devicePassword), Buffer.from(appName)])
 
-    this._App = options.App
-    this._network = options.network
-    this._appName = options.appName || DEFAULT_APP_NAME
-    this._isWaitingForWindow = false
-    // Set up our connect info object. This is global to handle scoping of a window event listener.
-    GLOBAL_CONNECT_INFO = {
-      isTestnet: this._network.isTestnet,
-      appName: this._appName
+    //--------------------------------------------------------------------------
+    const clientOpts = {
+      name: appName,
+      baseUrl: deviceEndpoint,
+      crypto,
+      timeout: 180000,
+      privKey: createHash('sha256').update(privKeyPreImage).digest()
     }
+
+    //--------------------------------------------------------------------------
+    this._lattice = new Client(clientOpts)
   }
 
-  errorProxy(target: any, func: string) {
-    const method = target[func]
-    if (Object.getOwnPropertyNames(target).includes(func) && typeof method === 'function') {
-      return async (...args: any[]) => {
-        try {
-          const result = await method.bind(target)(...args)
-          return result
-        } catch (e) {
-          const { name, ...errorNoName } = e
-          this._appInstance = null
-          throw new WalletError(e.toString(), errorNoName)
-        }
+  //----------------------------------------------------------------------------
+  // CACEHING
+  //----------------------------------------------------------------------------
+  _addressIsCached(address: Address): boolean {
+    let isCached = false
+    this._cachedAddresses.forEach((_address) => {
+      if (_address.address === address.address && _address.derivationPath === address.derivationPath ) {
+        isCached = true
       }
-    } else {
-      return method
-    }
+    })
+    return isCached
   }
 
-  async getApp() {
-    if (!this._appInstance && !this._isWaitingForWindow) {
-      // Open a window to the Lattice connector web application
-      const base = GLOBAL_CONNECT_INFO.isTestnet ? GRIDPLUS_CONNECT_DEV : GRIDPLUS_CONNECT_PROD
-      const url = `${base}?keyring=${GLOBAL_CONNECT_INFO.appName}`
-      console.log('Opening window', url)
-      const popup = window.open(url)
-      this._isWaitingForWindow = true
-      popup.postMessage('GET_LATTICE_CREDS', base)
-      window.addEventListener('message', this._handleNewAppInstance, false)
-      const tmpInterval = setInterval(() => {
-        console.log('waiting for app instance')
-        if (GLOBAL_CLIENT_DATA) {
-          const { sdkClient, deviceID } = GLOBAL_CLIENT_DATA
-          this._appInstance = new Proxy(new this._App(sdkClient, deviceID), { get: this.errorProxy.bind(this) })
-          GLOBAL_CLIENT_DATA = null
-          this._isWaitingForWindow = false
-          console.log('got app instance')
-          clearInterval(tmpInterval)
-          return this._appInstance
+  public _getCachedAddress(from: string): Address {
+    return this._cachedAddresses.filter((address) => address.address === from)[0]
+  }
+
+  //----------------------------------------------------------------------------
+  // PARSE & VALIDATE PATHS
+  //----------------------------------------------------------------------------
+  _parse(derivationPath: string): Array<number> {
+    const pathIndices: Array<number> = []
+    derivationPath.split('/').forEach((i) => {
+      const hardIdx = i.indexOf("'")
+      const isHard = hardIdx > -1
+      const iNum = isHard ? i.slice(0, hardIdx) : i
+      if (!isNaN(Number(iNum))) {
+        pathIndices.push(isHard ? Number(iNum) + 0x80000000 : Number(iNum))
+      }
+    })
+    return pathIndices
+  }
+
+  _isValidAssetPath(path: Array<number> = this._parse(this._derivationPath)): boolean {
+    const HARDENED_OFFSET = 0x80000000
+    const allowedPurposes = [HARDENED_OFFSET + 49, HARDENED_OFFSET + 44]
+    const allowedCoins = [HARDENED_OFFSET, HARDENED_OFFSET + 1, HARDENED_OFFSET + 60]
+    const allowedAccounts = [HARDENED_OFFSET]
+    const allowedChange = [0, 1]
+    return (
+      allowedPurposes.indexOf(path[0]) >= 0 &&
+      allowedCoins.indexOf(path[1]) >= 0 &&
+      allowedAccounts.indexOf(path[2]) >= 0 &&
+      allowedChange.indexOf(path[3]) >= 0
+    )
+  }
+
+  //----------------------------------------------------------------------------
+  // CONNECT
+  //----------------------------------------------------------------------------
+  private _connect(deviceId: string = this._deviceID): Promise<boolean> {
+    return new Promise<boolean>((resolved, rejected) => {
+      this._lattice.connect(deviceId, (err: Error, isPaired: boolean) => {
+        if (err) {
+          const { name, ...errorNoName } = err
+          rejected(new WalletError(err.toString(), errorNoName))
+        } else {
+          resolved(isPaired)
         }
-      }, 1000)
-    } else {
-      return this._appInstance
+      })
+    })
+  }
+
+  //----------------------------------------------------------------------------
+  // PAIR
+  //----------------------------------------------------------------------------
+  private _pair(secret: string): Promise<boolean> {
+    return new Promise<boolean>((resolved, rejected) => {
+      this._lattice.pair(secret, (err: Error, hasActiveWallet: boolean) => {
+        if (err) {
+          const { name, ...errorNoName } = err
+          rejected(new WalletError(err.toString(), errorNoName))
+        } else {
+          resolved(hasActiveWallet)
+        }
+      })
+    })
+  }
+
+  //----------------------------------------------------------------------------
+  // GET ADDRESSES
+  //----------------------------------------------------------------------------
+  private _getAddresses(request: any): Promise<[string]> {
+    return new Promise((resolved, rejected) => {
+      this._lattice.getAddresses(request, (err: Error, res: [string]) => {
+        if (err) {
+          const { name, ...errorNoName } = err
+          rejected(new WalletError(err.toString(), errorNoName))
+        } else {
+          resolved(res)
+        }
+      })
+    })
+  }
+
+  //----------------------------------------------------------------------------
+  // SIGN
+  //----------------------------------------------------------------------------
+  protected _sign(opts: any): Promise<any> {
+    return new Promise((resolved, rejected) => {
+      this._lattice.sign(opts, (err: Error, res: any) => {
+        if (err) {
+          const { name, ...errorNoName } = err
+          rejected(new WalletError(err.toString(), errorNoName))
+        } else {
+          resolved(res)
+        }
+      })
+    })
+  }
+
+  //----------------------------------------------------------------------------
+  // WALLETPROVIDER IMPL
+  //----------------------------------------------------------------------------
+  async isWalletAvailable(): Promise<boolean> {
+    try {
+      const isPaired = await this._connect()
+      if (!isPaired) {
+        const secret = await this._pairingCodeProvider()
+        const active = await this._pair(secret)
+        return Promise.resolve(active)
+      }
+      return Promise.resolve(isPaired)
+    } catch (e) {
+      return Promise.reject(e)
     }
   }
 
-  async isWalletAvailable() {
-    console.log('checking if wallet is available')
-    if (!this._appInstance) {
-      return false
-    }
-    await this.getApp()
-    // Connect to the Lattice device
-    await this._connect()
-    // If we didn't throw an error, the wallet is available
-    return true
+  async getAddresses(startingIndex?: number, numAddresses: number = 1, change?: boolean): Promise<Address[]> {
+    return await this
+      .isWalletAvailable()
+      .then((isWalletAvailable) => {
+        if (isWalletAvailable === false) {
+          throw new Error('Device not available.')
+        }
+        const req = {
+          startPath: this._parse(this._derivationPath),
+          n: numAddresses
+        }
+        return this._getAddresses(req)
+      })
+      .then((addresses) => {
+        console.log(`${JSON.stringify(addresses, null, 2)}`)
+        return addresses.map((address) => {
+          return new Address({
+            address: address,
+            derivationPath: this._derivationPath,
+            publicKey: address
+          })
+        })
+      })
+  }
+
+  async getUsedAddresses(numAddressPerCall?: number): Promise<Address[]> {
+    throw new Error()
+  }
+
+  async getUnusedAddress(change?: boolean, numAddressPerCall?: number): Promise<Address> {
+    throw new Error()
   }
 
   async getConnectedNetwork() {
-    return this._network
-  }
-
-  // Connect to the user's Lattice via the instantiated app's SDK Client.
-  // The state inside the client object will be updated with a new wallet UID
-  // if the user has switched wallets (e.g. using a SafeCard).
-  async _connect() {
-    /*
-    if (!this._appInstance) {
-      throw new WalletError('GridPlus SDK client not instantiated.')
-    }
-    this._appInstance.client.connect(this._appInstance.deviceID, (err) => {
-      if (err) {
-        throw new WalletError(err.message())
-      }
-      return
-    })
-    */
-    return
-  }
-
-  _handleNewAppInstance(event: any) {
-    console.log('got event from', event.origin, JSON.parse(event.data))
-    console.log('what is my scope', this)
-    // Ensure origin
-    const base = GLOBAL_CONNECT_INFO.isTestnet ? GRIDPLUS_CONNECT_DEV : GRIDPLUS_CONNECT_PROD
-    console.log('base', base)
-    if (event.origin !== base) {
-      return
-    }
-    console.log('event origin matches base... parsing')
-    // Parse response data
-    try {
-      const data = JSON.parse(event.data)
-      console.log('event data', data)
-      if (!data.deviceID || !data.password) {
-        throw new WalletError('Invalid credentials returned from Lattice.')
-      }
-      // Instantiate an SDK client with the returned credential data
-      const defaultSigningUrl = GLOBAL_CONNECT_INFO.isTestnet ? GRIDPLUS_SIGNING_DEV : GRIDPLUS_SIGNING_PROD
-      const privKeyPreImage = Buffer.concat([
-        Buffer.from(data.password),
-        Buffer.from(data.deviceID),
-        Buffer.from(GLOBAL_CONNECT_INFO.appName)
-      ])
-      const clientOpts = {
-        name: GLOBAL_CONNECT_INFO.appName,
-        baseUrl: data.endpoint ? data.endpoint : defaultSigningUrl,
-        crypto,
-        timeout: 180000,
-        privKey: createHash('sha256').update(privKeyPreImage).digest()
-      }
-      const sdkClient = new Client(clientOpts)
-      console.log('returning new client')
-      // Add the client to our app instance and return
-      GLOBAL_CLIENT_DATA = {
-        sdkClient,
-        deviceID: data.deviceID
-      }
-    } catch (err) {
-      throw new WalletError(err.toString())
-    }
+    return Promise.resolve(this._network)
   }
 }

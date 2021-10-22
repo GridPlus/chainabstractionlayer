@@ -171,7 +171,15 @@ function testWallet(chain: Chain) {
 
 describe('Wallet Interaction', function () {
   this.timeout(TEST_TIMEOUT)
+  describe('Bitcoin - Lattice', () => {
+    before(async function () {
+      await importBitcoinAddresses(chains.bitcoinWithLattice)
+    })
 
+    testWallet(chains.bitcoinWithLattice)
+  })
+
+  /*
   describe('Bitcoin - JsWallet', () => {
     before(async function () {
       await importBitcoinAddresses(chains.bitcoinWithJs)
@@ -187,4 +195,5 @@ describe('Wallet Interaction', function () {
 
     testWallet(chains.bitcoinWithLedger)
   })
+  */
 })

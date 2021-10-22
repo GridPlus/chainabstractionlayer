@@ -1,3 +1,3 @@
-import LatticeProvider from './LatticeProvider'
+import LatticeProvider, { LatticeProviderOptions } from './LatticeProvider'
 
-export { LatticeProvider }
+export { LatticeProvider, LatticeProviderOptions }
