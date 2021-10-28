@@ -21,12 +21,8 @@
   "dependencies": {
     "@babel/polyfill": "^7.12.1",
     "@babel/runtime": "^7.12.1",
-    "@liquality/debug": "^1.6.1",
-    "@liquality/errors": "^1.6.1",
-    "@liquality/types": "^1.6.1",
-    "@liquality/utils": "^1.6.1",
-    "@liquality/ethereum-networks": "^1.6.11",
-    "@liquality/wallet-provider": "^1.6.1",
+    "@liquality/ethereum-networks": "^1.8.0",
+    "@liquality/wallet-provider": "^1.8.0",
     "gridplus-sdk": "^0.8.6"
   },
   "homepage": "https://github.com/liquality/chainabstractionlayer#readme",

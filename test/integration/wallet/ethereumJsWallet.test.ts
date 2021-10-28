@@ -94,7 +94,9 @@ describe('Wallet Interaction', function () {
   describe('Ethereum - Lattice', () => {
     testWallet(chains.ethereumWithLattice, `m/44'/${config.ethereum.network.coinType}'/0'/0/0`)
   })
+  */
 
+  /*
   describe('Ethereum - Js', () => {
     testWallet(chains.ethereumWithJs, `m/44'/${config.ethereum.network.coinType}'/0'/0/0`)
   })

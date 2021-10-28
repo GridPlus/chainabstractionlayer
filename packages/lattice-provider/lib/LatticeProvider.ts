@@ -64,26 +64,20 @@ export default abstract class LatticeProvider extends WalletProvider {
   }
 
   //----------------------------------------------------------------------------
-  // CACEHING
+  // CACHING
   //----------------------------------------------------------------------------
   _addressIsCached(address: Address): boolean {
-    let isCached = false
-    this._cachedAddresses.forEach((_address) => {
-      if (_address.address === address.address && _address.derivationPath === address.derivationPath ) {
-        isCached = true
-      }
-    })
-    return isCached
+    return this._getAddresses(address) === null
   }
 
-  public _getCachedAddress(from: string): Address {
+  public _getCachedAddress(from: string): Address | null {
     return this._cachedAddresses.filter((address) => address.address === from)[0]
   }
 
   //----------------------------------------------------------------------------
   // PARSE & VALIDATE PATHS
   //----------------------------------------------------------------------------
-  _parse(derivationPath: string): Array<number> {
+  _parse(derivationPath: string = this._derivationPath): Array<number> {
     const pathIndices: Array<number> = []
     derivationPath.split('/').forEach((i) => {
       const hardIdx = i.indexOf("'")
@@ -96,7 +90,7 @@ export default abstract class LatticeProvider extends WalletProvider {
     return pathIndices
   }
 
-  _isValidAssetPath(path: Array<number> = this._parse(this._derivationPath)): boolean {
+  _isValidAssetPath(path: Array<number> = this._parse()): boolean {
     const HARDENED_OFFSET = 0x80000000
     const allowedPurposes = [HARDENED_OFFSET + 49, HARDENED_OFFSET + 44]
     const allowedCoins = [HARDENED_OFFSET, HARDENED_OFFSET + 1, HARDENED_OFFSET + 60]
@@ -191,28 +185,50 @@ export default abstract class LatticeProvider extends WalletProvider {
     }
   }
 
-  async getAddresses(startingIndex?: number, numAddresses: number = 1, change?: boolean): Promise<Address[]> {
+  async getAddresses(startingIndex: number = 0, numAddresses: number = 1, change?: boolean): Promise<Address[]> {
     return await this
       .isWalletAvailable()
       .then((isWalletAvailable) => {
         if (isWalletAvailable === false) {
           throw new Error('Device not available.')
         }
+        const startPath = this._parse()
+        startPath[4] = startingIndex
         const req = {
-          startPath: this._parse(this._derivationPath),
+          startPath: startPath,
           n: numAddresses
         }
+        console.log(`${JSON.stringify(req, null, 2)}`)
         return this._getAddresses(req)
       })
       .then((addresses) => {
-        console.log(`${JSON.stringify(addresses, null, 2)}`)
-        return addresses.map((address) => {
+        // Convert address strings to 'Address'.
+        const asAddresses = addresses.map((address, index) => {
+          //----------------------------------------------------------------------
+          // Replaces 'change` (default: 0) with the appropriate value.
+          // Replaces 'address_index` (default: 0) with the correct index offset.
+          //----------------------------------------------------------------------
+          const pathIndices = this._parse()
+          const changePathLength = parseInt(`${pathIndices[3].toString().length}`)
+          const indexPathLength = parseInt(`${pathIndices[4].toString().length}`)
+          const changeString = change ? '1' : '0'
+          const changeAndIndexString = `${changeString}/${startingIndex + index}`
+          const derivationPath = `${this._derivationPath.slice(0, -(changePathLength + indexPathLength))}${changeAndIndexString}`
+          //----------------------------------------------------------------------
           return new Address({
             address: address,
-            derivationPath: this._derivationPath,
+            derivationPath: derivationPath,
             publicKey: address
           })
         })
+        // Cache the addresses, if necessary.
+        asAddresses.forEach((address) => {
+          if (this._addressIsCached(address) === false) {
+            this._cachedAddresses.push(address)
+          }
+        })
+        console.log(`${JSON.stringify(asAddresses, null, 2)}`)
+        return asAddresses
       })
   }
 
