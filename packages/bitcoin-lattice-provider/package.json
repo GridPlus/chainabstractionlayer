@@ -20,15 +20,8 @@
   "license": "MIT",
   "dependencies": {
     "@babel/runtime": "^7.12.1",
-    "@liquality/bitcoin-networks": "^1.6.1",
-    "@liquality/bitcoin-utils": "^1.6.1",
-    "@liquality/bitcoin-wallet-provider": "^1.6.1",
-    "@liquality/crypto": "^1.6.1",
-    "@liquality/types": "^1.6.1",
-    "@liquality/utils": "^1.6.1",
-    "bignumber.js": "^9.0.0",
-    "bip32": "^2.0.6",
-    "bitcoinjs-lib": "^5.2.0",
+    "@liquality/bitcoin-networks": "^1.8.0",
+    "@liquality/bitcoin-wallet-provider": "^1.8.0",
     "gridplus-sdk": "^0.8.6"
   },
   "devDependencies": {

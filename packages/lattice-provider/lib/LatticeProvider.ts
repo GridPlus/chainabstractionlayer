@@ -18,7 +18,7 @@ export interface LatticeProviderOptions {
   devicePassword: string
 }
 
-export default abstract class LatticeProvider extends WalletProvider {
+export default class LatticeProvider extends WalletProvider {
   _derivationPath: string
   _deviceID: string
   _cachedAddresses: Array<Address>
@@ -43,9 +43,6 @@ export default abstract class LatticeProvider extends WalletProvider {
     this._deviceID = deviceID
     this._pairingCodeProvider = pairingCodeProvider
     this._cachedAddresses = []
-    //--------------------------------------------------------------------------
-    console.log(`${JSON.stringify(network, null, 2)}`)
-    console.log(`${JSON.stringify(this._derivationPath, null, 2)}`)
 
     //--------------------------------------------------------------------------
     const privKeyPreImage = Buffer.concat([Buffer.from(deviceID), Buffer.from(devicePassword), Buffer.from(appName)])
@@ -67,10 +64,10 @@ export default abstract class LatticeProvider extends WalletProvider {
   // CACHING
   //----------------------------------------------------------------------------
   _addressIsCached(address: Address): boolean {
-    return this._getAddresses(address) === null
+    return this._getCachedAddress(address.derivationPath) === null
   }
 
-  public _getCachedAddress(from: string): Address | null {
+  _getCachedAddress(from: string): Address | null {
     return this._cachedAddresses.filter((address) => address.address === from)[0]
   }
 
@@ -185,7 +182,19 @@ export default abstract class LatticeProvider extends WalletProvider {
     }
   }
 
+  async getWalletAddress(address: string): Promise<Address> {
+    const cachedAddress = this._getCachedAddress(address)
+    if (cachedAddress === null) {
+      throw new Error(`The '${address}'' cannot be found in the list of cached addresses.`)
+    }
+    return cachedAddress
+  }
+
   async getAddresses(startingIndex: number = 0, numAddresses: number = 1, change?: boolean): Promise<Address[]> {
+    if (numAddresses === 0) {
+      throw new Error(`'numAddresses' must be greater than '0'. Got ${numAddresses}.`)
+    }
+
     return await this
       .isWalletAvailable()
       .then((isWalletAvailable) => {
@@ -193,6 +202,7 @@ export default abstract class LatticeProvider extends WalletProvider {
           throw new Error('Device not available.')
         }
         const startPath = this._parse()
+        startPath[3] = change ? 1 : 0
         startPath[4] = startingIndex
         const req = {
           startPath: startPath,
@@ -213,7 +223,7 @@ export default abstract class LatticeProvider extends WalletProvider {
           const indexPathLength = parseInt(`${pathIndices[4].toString().length}`)
           const changeString = change ? '1' : '0'
           const changeAndIndexString = `${changeString}/${startingIndex + index}`
-          const derivationPath = `${this._derivationPath.slice(0, -(changePathLength + indexPathLength))}${changeAndIndexString}`
+          const derivationPath = `${this._derivationPath.slice(0, -(changePathLength + indexPathLength + 1))}${changeAndIndexString}`
           //----------------------------------------------------------------------
           return new Address({
             address: address,
@@ -242,5 +252,12 @@ export default abstract class LatticeProvider extends WalletProvider {
 
   async getConnectedNetwork() {
     return Promise.resolve(this._network)
+  }
+
+  //----------------------------------------------------------------------------
+  // SIGN MESSAGE
+  //----------------------------------------------------------------------------
+  async signMessage(message: string, from: string): Promise<string> {
+    throw new Error("NOT IMPLEMENTED")
   }
 }

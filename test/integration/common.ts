@@ -110,7 +110,7 @@ const bitcoinWithLattice = new Client()
 bitcoinWithLattice.addProvider(
   new BitcoinLatticeProvider({
     pairingCodeProvider: LATTICE_INPUT_PAIRING,
-    derivationPath: "m/49'/0'/0'/0/0",
+    derivationPath: "m/49'/1'/0'/0/0",
     deviceID: LATTICE_CREDS.deviceId,
     devicePassword: LATTICE_CREDS.password,
     network: config.bitcoin.network

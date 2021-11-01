@@ -14,7 +14,7 @@ interface EthereumLatticeProviderOptions extends LatticeProviderOptions {
   network: EthereumNetwork
 }
 
-export default class EthereumLedgerProvider extends LatticeProvider {
+export default class EthereumLatticeProvider extends LatticeProvider {
   _network: EthereumNetwork
 
   //----------------------------------------------------------------------------
